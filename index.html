@@ -485,6 +485,43 @@ async function languageTool(text){
   if(!res.ok)throw new Error("http "+res.status);
   return res.json();
 }
+/* ---------- 日本人がよくするミスの独自ルール（LanguageTool が見逃すもの） ---------- */
+const ING={go:"going",see:"seeing",meet:"meeting",hear:"hearing",do:"doing",have:"having",be:"being",visit:"visiting",play:"playing",watch:"watching",come:"coming",study:"studying",read:"reading",eat:"eating"};
+const EVER={go:"have ever been to",went:"have ever been to",visit:"have ever visited",see:"have ever seen",eat:"have ever eaten",read:"have ever read",watch:"have ever watched"};
+const SING={informations:"information",advices:"advice",furnitures:"furniture",homeworks:"homework",luggages:"luggage",baggages:"baggage",knowledges:"knowledge",equipments:"equipment"};
+const LOCAL_RULES=[
+  {re:/\bwhere\s+I\s+(go|went|visit|visited)\s+there\b/gi,rep:()=>"I have ever visited",cat:"語法",hint:"where（〜する場所）と there（そこに）は同じ意味なので一緒に使いません。「今まで行った中で一番」は現在完了で表します。例：the best place I have ever visited"},
+  {re:/\bwhere\s+((?:[A-Za-z']+\s+){1,4}?)there\b/gi,rep:m=>"where "+m[1].trim(),cat:"語法",hint:"where（〜する場所）と there（そこに）は同じ意味なので、there は不要です。"},
+  {re:/\b(?:best|worst|most\s+\w+)\s+\w+\s+(?:that\s+)?I\s+(go|visit|see|eat|read|watch)\b/gi,span:m=>[m.index+m[0].length-m[1].length,m[1].length],rep:m=>EVER[m[1].toLowerCase()],cat:"時制",hint:"最上級（一番〜）で「今まで〜した中で」は現在完了を使います。例：the best movie I have ever seen"},
+  {re:/\bpoint\s+of\s+(?:the\s+)?([A-Z][\w-]*)\s+(anime|manga|movie|film|drama|game)\b/g,rep:m=>"setting of the "+m[2]+" "+m[1],cat:"語彙選択",hint:"「聖地・舞台」は point ではなく setting（舞台）です。作品名の前には the anime などを付けます。例：the setting of the anime Higurashi"},
+  {re:/\bpoint\s+of\b(?=[^.!?]*\b(?:anime|manga|movie|film|drama|game)\b)/gi,rep:()=>"setting of",cat:"語彙選択",hint:"「聖地・舞台」は point ではなく setting（舞台）と言います。"},
+  {re:/\bdiscuss(es|ed)?\s+about\b/gi,rep:m=>"discuss"+(m[1]||""),cat:"語法",hint:"discuss は他動詞なので about は不要です。"},
+  {re:/\bcontact(s|ed)?\s+with\b/gi,rep:m=>"contact"+(m[1]||""),cat:"語法",hint:"contact は他動詞なので with は不要です。"},
+  {re:/\benter(s|ed)?\s+into\s+the\s+(room|house|school|building|classroom)\b/gi,rep:m=>"enter"+(m[1]||"")+" the "+m[2],cat:"語法",hint:"「部屋に入る」の enter は他動詞なので into は不要です。"},
+  {re:/\bmarr(y|ied|ies)\s+with\b/gi,rep:m=>"marr"+m[1],cat:"語法",hint:"marry は他動詞なので with は不要です（be married to も可）。"},
+  {re:/\breach(es|ed)?\s+(to|at)\b/gi,rep:m=>"reach"+(m[1]||""),cat:"語法",hint:"reach は他動詞なので to / at は不要です。"},
+  {re:/\bexplain(s|ed)?\s+(me|him|her|us|them)\b/gi,rep:m=>"explain"+(m[1]||"")+" to "+m[2],cat:"語法",hint:"explain は「人に」を直接とれません。explain to me のように to を入れます。"},
+  {re:/\blook(s|ing|ed)?\s+forward\s+to\s+(go|see|meet|hear|do|have|be|visit|play|watch|come|study|read|eat)\b/gi,rep:m=>"look"+(m[1]||"")+" forward to "+ING[m[2].toLowerCase()],cat:"語法",hint:"look forward to の to は前置詞なので、後ろは -ing 形です。"},
+  {re:/\bvery\s+(like|love|enjoy)\b/gi,rep:m=>"really "+m[1],cat:"語法",hint:"very は動詞を修飾できません。really like や like … very much を使います。"},
+  {re:/\b(go|goes|went|come|comes|came)\s+to\s+(home|abroad|downtown|there|here)\b/gi,rep:m=>m[1]+" "+m[2],cat:"前置詞",hint:"home / abroad / there などは副詞なので to は不要です。"},
+  {re:/\b(many|few)\s+(information|advice|furniture|homework|luggage|baggage|news|knowledge|equipment)\b/gi,rep:m=>(m[1].toLowerCase()==="many"?"a lot of ":"little ")+m[2],cat:"名詞の数",hint:"数えられない名詞には many / few ではなく a lot of / little を使います。"},
+  {re:/\b(informations|advices|furnitures|homeworks|luggages|baggages|knowledges|equipments)\b/gi,rep:m=>SING[m[1].toLowerCase()],cat:"名詞の数",hint:"数えられない名詞は複数形にしません。"},
+  {re:/\bI\s+am\s+(agree|disagree)\b/gi,rep:m=>"I "+m[1],cat:"文法",hint:"agree は動詞なので am は不要です。"},
+  {re:/\bin\s+(last|next|this)\s+(week|month|year|weekend|summer|winter|spring|autumn)\b/gi,rep:m=>m[1]+" "+m[2],cat:"前置詞",hint:"last / next / this の前に in は付けません。"},
+  {re:/\bmost\s+of\s+(students|people|japanese|children|teachers)\b/gi,rep:m=>"most "+m[1],cat:"語法",hint:"「ほとんどの〜」は most students、または most of the students です。"},
+  {re:/\bsince\s+(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+(years|months|days|weeks)\b/gi,rep:m=>"for "+m[1]+" "+m[2],cat:"前置詞",hint:"期間（〜の間）は for、起点（〜から）は since を使います。"},
+  {re:/\bthere\s+(is|was)\s+(many|a\s+lot\s+of|several|two|three|some)\s+(\w+s)\b/gi,span:m=>[m.index+6,m[1].length],rep:m=>m[1].toLowerCase()==="is"?"are":"were",cat:"主語と動詞の一致",hint:"後ろの名詞が複数なら there are / there were です。"}
+];
+function localItems(text){
+  const out=[];
+  LOCAL_RULES.forEach(r=>{r.re.lastIndex=0;let m;
+    while((m=r.re.exec(text))){
+      const [offset,length]=r.span?r.span(m):[m.index,m[0].length];
+      if(!out.some(i=>offset<i.offset+i.length&&offset+length>i.offset))
+        out.push({offset,length,message:"",reps:[r.rep(m)],cat:r.cat,minor:false,hint:r.hint,local:true});
+    }});
+  return out;
+}
 function toItems(data,text){
   const ms=(data.matches||[]).slice().sort((a,b)=>a.offset-b.offset);
   const out=[];let end=-1;
@@ -495,6 +532,8 @@ function toItems(data,text){
       cat:CAT_JA[m.rule?.category?.id]||m.rule?.category?.name||"指摘",
       minor:MINOR_TYPES.has(it)||m.rule?.category?.id==="STYLE",
       hint:hintJa(m)};
+    // 「文と文の間にスペースがない」は明確な誤りとして扱う
+    if(/space between sentences|WHITESPACE|SENTENCE_WHITESPACE/i.test((m.rule?.id||"")+" "+m.message)){item.minor=false;item.cat="スペース";item.hint="ピリオドの後には半角スペースを1つ入れます。"}
     // 大文字で始まる語のスペル指摘は、人名・地名の可能性が高いので減点しない（Yamada → Yamaha のような誤検出を防ぐ）
     if(text&&it==="misspelling"){
       const w=text.slice(m.offset,m.offset+m.length);
@@ -502,6 +541,12 @@ function toItems(data,text){
     }
     out.push(item);
   });
+  // 独自ルールを優先して合体（重なる LanguageTool の指摘は外す）
+  if(text){
+    const loc=localItems(text);
+    for(let k=out.length-1;k>=0;k--){const i=out[k];if(loc.some(l=>i.offset<l.offset+l.length&&i.offset+i.length>l.offset))out.splice(k,1)}
+    out.push(...loc);out.sort((a,b)=>a.offset-b.offset);
+  }
   // 文末のピリオド
   if(text){
     const t=text.replace(/\s+$/,"");
@@ -521,14 +566,17 @@ function applyFixes(text,items){
   items.slice().sort((a,b)=>b.offset-a.offset).forEach(i=>{if(!i.minor&&i.reps.length)s=s.slice(0,i.offset)+i.reps[0]+s.slice(i.offset+i.length)});
   return s;
 }
-function scoreOf(text,items,ct){
+function scoreOf(text,items,ct,topicId){
   const n=Math.max(words(text),15);  // 短文で1つのミスが大きく響きすぎないように最低15語として計算
   const major=items.filter(i=>!i.minor).length, minor=items.filter(i=>i.minor&&!i.name).length;
-  let sc=Math.max(0,Math.min(100,Math.round(100-(major+minor*0.3)/n*400)));
+  let sc=Math.max(0,Math.min(100,Math.round(100-(major+minor*0.3)/n*300)));
   if(ct){
     if(offTopic(ct))sc=Math.min(sc,20);                      // お題と関係ない答案
     else if(ct.type==="tr")sc=Math.max(0,sc-ct.missing.length*15-(ct.notes||[]).length*10);  // 訳し漏れ1つにつき-15
   }
+  // 語数が目安より少ないときの減点（長文のお題のみ。最大-30）
+  const tp=TOPICS.find(t=>t.id===topicId);
+  if(tp&&tp.min>=20){const wc=words(text);if(wc<tp.min)sc=Math.max(0,sc-Math.round((1-wc/tp.min)*30))}
   return sc;
 }
 
@@ -536,10 +584,11 @@ function scoreOf(text,items,ct){
 function wordSpans(s){return esc(s).replace(/[A-Za-z][A-Za-z'’-]*/g,w=>`<span class="w" data-w="${w}">${w}</span>`)}
 function renderResult(text,items,isExample,ct){
   if(ct===undefined)ct=contentCheck(text,$("topic").value);
-  const score=scoreOf(text,items,ct), major=items.filter(i=>!i.minor).length, minor=items.length-major;
+  const score=scoreOf(text,items,ct,$("topic").value), major=items.filter(i=>!i.minor).length, minor=items.length-major;
   const off=offTopic(ct);
   const gramVerdict=items.length===0?"文法の誤りは見つかりませんでした":major===0?"ほぼ正しい":major<=2?"一部に誤りあり":"誤りが多い";
-  const verdict=off?"お題に合っていません":ct&&ct.type==="tr"&&!ct.ok?"訳し漏れがあります":gramVerdict;
+  const tpc=curTopic(),short=tpc.min>=20&&words(text)<tpc.min*0.6;
+  const verdict=off?"お題に合っていません":ct&&ct.type==="tr"&&!ct.ok?"訳し漏れがあります":major>=3?"誤りが多い":short?(major?"誤りあり・語数不足":"語数が足りません"):gramVerdict;
   const ctHtml=!ct?"":`
     <div class="item ${ct.ok?"minor":""}" style="border-left-color:var(${ct.ok?"--ok":"--pen"})">
       <div class="hd"><span class="chip ${ct.ok?"g":"r"}"><i data-lucide="${ct.ok?"circle-check":"circle-alert"}"></i>${ct.type==="tr"?"和訳の内容":"お題との関係"}</span></div>
@@ -553,7 +602,7 @@ function renderResult(text,items,isExample,ct){
   items.forEach((i,n)=>{
     html+=wordSpans(text.slice(pos,i.offset));
     const orig=text.slice(i.offset,i.offset+i.length);
-    html+=i.reps.length&&!i.minor?`<del>${esc(orig)}</del> <ins>${esc(i.reps[0])}</ins><sup>${n+1}</sup>`:`<mark>${esc(orig)}</mark><sup>${n+1}</sup>`;
+    html+=i.reps.length&&!i.minor?`<del>${esc(orig)}</del> <ins>${esc(i.reps[0].replace(/^ /,"␣"))}</ins><sup>${n+1}</sup>`:`<mark>${esc(orig)}</mark><sup>${n+1}</sup>`;
     pos=i.offset+i.length;
   });
   html+=wordSpans(text.slice(pos));
@@ -579,7 +628,7 @@ function renderResult(text,items,isExample,ct){
       <div class="pair"><s>${esc(text.slice(i.offset,i.offset+i.length))}</s></div>
       ${i.hint?`<p>${esc(i.hint)}</p>`:""}
       <p class="en">${esc(i.message)}</p>
-      ${i.reps.length?`<div class="reps">${i.reps.map(r=>`<button type="button" data-fix="${n}" data-rep="${esc(r)}"><i data-lucide="check"></i>${esc(r)||"（削除）"}</button>`).join("")}</div>`:""}
+      ${i.reps.length?`<div class="reps">${i.reps.map(r=>`<button type="button" data-fix="${n}" data-rep="${esc(r)}"><i data-lucide="check"></i>${r===""?"（削除）":esc(r.replace(/^ /,"␣"))}</button>`).join("")}</div>`:""}
       </li>`).join("")}</ul>
     <div class="label"><i data-lucide="file-pen-line"></i>提案を反映した文</div><p class="clean">${esc(applyFixes(text,items))}</p>
     <div class="row"><button type="button" class="small" id="applyAll"><i data-lucide="wand-sparkles"></i>誤りの修正をすべて答案に反映</button>
@@ -617,7 +666,7 @@ async function check(){
     renderResult(text,items,false,ct);
     const h=store.get("history",[]);h.unshift({at:Date.now(),text,items,topic:$("topic").value,ct});store.set("history",h.slice(0,200));
     updStreak();
-    const sc=scoreOf(text,items,ct);
+    const sc=scoreOf(text,items,ct,$("topic").value);
     toast(offTopic(ct)?`お題に合っていない可能性があります：${sc}点`:items.length||(ct&&!ct.ok)?`チェックしました：${sc}点`:"誤りは見つかりませんでした！");
     sfx(sc>=90?"great":"done");track("check",{score:sc,errors:items.length});
     if(sc>=90&&window.confetti&&!reduceMotion)confetti({particleCount:90,spread:70,origin:{y:.75},colors:["#d33a3a","#2f5fb3","#1f8a5b","#f0b45c"]});
@@ -687,7 +736,7 @@ function renderStats(){
   const h=store.get("history",[]);const out=$("statsOut");
   charts.forEach(c=>c.destroy());charts=[];
   if(!h.length){out.innerHTML='<div class="empty"><i data-lucide="chart-line"></i>まだ記録がありません。英文をチェックすると、点数の推移と苦手なミスの種類がここに表示されます。</div>';icons();return}
-  const scores=h.map(x=>scoreOf(x.text,x.items,x.ct));
+  const scores=h.map(x=>scoreOf(x.text,x.items,x.ct,x.topic));
   const avg=Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
   const cats={};h.forEach(x=>x.items.forEach(i=>{if(!i.minor)cats[i.cat]=(cats[i.cat]||0)+1}));
   const top=Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,6);
@@ -710,7 +759,7 @@ function renderStats(){
   const recent=h.slice(0,20).reverse();
   charts.push(new Chart($("cScore"),{type:"line",
     data:{labels:recent.map(x=>{const d=new Date(x.at);return `${d.getMonth()+1}/${d.getDate()}`}),
-      datasets:[{data:recent.map(x=>scoreOf(x.text,x.items,x.ct)),borderColor:pen,backgroundColor:pen+"22",fill:true,tension:.3,pointRadius:3,pointBackgroundColor:pen}]},
+      datasets:[{data:recent.map(x=>scoreOf(x.text,x.items,x.ct,x.topic)),borderColor:pen,backgroundColor:pen+"22",fill:true,tension:.3,pointRadius:3,pointBackgroundColor:pen}]},
     options:{maintainAspectRatio:false,animation:reduceMotion?false:undefined,plugins:{legend:{display:false}},
       scales:{y:{min:0,max:100,ticks:{stepSize:20},grid:{color:grid}},x:{grid:{display:false}}}}}));
   if(top.length)charts.push(new Chart($("cCat"),{type:"bar",

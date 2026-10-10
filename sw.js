@@ -1,6 +1,6 @@
 // オフラインでも画面を開けるようにするサービスワーカー
 // アプリを更新したら VERSION の数字を上げると、古いキャッシュが入れ替わります。
-const VERSION = "v4";
+const VERSION = "v5";
 const CACHE = "eisakubun-" + VERSION;
 const SHELL = [
   "./",
