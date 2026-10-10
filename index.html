@@ -534,26 +534,43 @@ async function check(){
 }
 
 /* ---------- 辞書（Free Dictionary API＋Datamuse で類語） ---------- */
+/* 6秒で打ち切る fetch（辞書APIが応答しないときに固まらないように） */
+function fetchT(url,ms=6000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);return fetch(url,{signal:c.signal}).finally(()=>clearTimeout(t))}
+const POS_JA={n:"noun",v:"verb",adj:"adjective",adv:"adverb",u:""};
+async function fromFreeDictionary(word){
+  const res=await fetchT("https://api.dictionaryapi.dev/api/v2/entries/en/"+encodeURIComponent(word));
+  if(res.status===404)return {notFound:true};
+  if(!res.ok)throw 0;
+  const e=(await res.json())[0];
+  return {word:e.word,ph:e.phonetic||(e.phonetics||[]).find(p=>p.text)?.text||"",
+    meanings:(e.meanings||[]).slice(0,3).map(m=>({pos:m.partOfSpeech,defs:m.definitions.slice(0,3).map(d=>({d:d.definition,ex:d.example||""}))}))};
+}
+async function fromDatamuse(word){  // 予備：Datamuse の定義データ
+  const r=await fetchT("https://api.datamuse.com/words?max=1&md=dp&sp="+encodeURIComponent(word));
+  if(!r.ok)throw 0;
+  const e=(await r.json())[0];
+  if(!e||e.word.toLowerCase()!==word||!(e.defs||[]).length)return {notFound:true};
+  const groups={};
+  e.defs.forEach(x=>{const [p,d]=x.split("\t");const k=POS_JA[p]??p;(groups[k]=groups[k]||[]).push({d,ex:""})});
+  return {word:e.word,ph:"",meanings:Object.entries(groups).slice(0,3).map(([pos,defs])=>({pos,defs:defs.slice(0,3)}))};
+}
 async function lookup(word){
   word=String(word).replace(/[’']s$/,"").toLowerCase();
   $("dictQ").value=word;
   const out=$("dictOut");out.innerHTML='<div class="empty"><i data-lucide="loader-circle" class="spin"></i>調べています…</div>';icons();
+  const synP=fetchT("https://api.datamuse.com/words?max=8&rel_syn="+encodeURIComponent(word)).then(r=>r.ok?r.json():[]).catch(()=>[]);
   try{
-    const [res,syn]=await Promise.all([
-      fetch("https://api.dictionaryapi.dev/api/v2/entries/en/"+encodeURIComponent(word)),
-      fetch("https://api.datamuse.com/words?max=8&rel_syn="+encodeURIComponent(word)).then(r=>r.ok?r.json():[]).catch(()=>[])
-    ]);
-    if(res.status===404){
-      const sug=await fetch("https://api.datamuse.com/sug?max=5&s="+encodeURIComponent(word)).then(r=>r.ok?r.json():[]).catch(()=>[]);
+    let e;
+    try{e=await fromFreeDictionary(word)}catch(_){e=await fromDatamuse(word)}
+    if(e.notFound){
+      const sug=await fetchT("https://api.datamuse.com/sug?max=5&s="+encodeURIComponent(word)).then(r=>r.ok?r.json():[]).catch(()=>[]);
       out.innerHTML=`<div class="empty"><i data-lucide="search-x"></i>「${esc(word)}」は辞書に見つかりませんでした。${sug.length?`<div class="syn">${sug.map(s=>`<button type="button" data-look="${esc(s.word)}">${esc(s.word)}</button>`).join("")}</div><small>もしかして？</small>`:"つづりを確認してください。"}</div>`;icons();return}
-    if(!res.ok)throw 0;
-    const e=(await res.json())[0];
-    const ph=e.phonetic||(e.phonetics||[]).find(p=>p.text)?.text||"";
-    out.innerHTML=`<div class="dict"><h3>${esc(e.word)} <small>${esc(ph)}</small><button type="button" class="small" id="sayWord" aria-label="発音を聞く"><i data-lucide="volume-2"></i></button></h3>
-      ${(e.meanings||[]).slice(0,3).map(m=>`<div><span class="pos">${esc(m.partOfSpeech)}</span><ol>${m.definitions.slice(0,3).map(d=>`<li>${esc(d.definition)}${d.example?`<br><span class="ex">${esc(d.example)}</span>`:""}</li>`).join("")}</ol></div>`).join("")}
+    const syn=await synP;
+    out.innerHTML=`<div class="dict"><h3>${esc(e.word)} <small>${esc(e.ph)}</small><button type="button" class="small" id="sayWord" aria-label="発音を聞く"><i data-lucide="volume-2"></i></button></h3>
+      ${e.meanings.map(m=>`<div>${m.pos?`<span class="pos">${esc(m.pos)}</span>`:""}<ol>${m.defs.map(d=>`<li>${esc(d.d)}${d.ex?`<br><span class="ex">${esc(d.ex)}</span>`:""}</li>`).join("")}</ol></div>`).join("")}
       ${syn.length?`<div class="label"><i data-lucide="replace"></i>似た意味の語（言い換えに）</div><div class="syn">${syn.map(s=>`<button type="button" data-look="${esc(s.word)}">${esc(s.word)}</button>`).join("")}</div>`:""}</div>`;
     $("sayWord").onclick=()=>say(e.word);icons();
-  }catch(err){out.innerHTML='<div class="empty"><i data-lucide="wifi-off"></i>辞書を読み込めませんでした。もう一度試してください。</div>';icons()}
+  }catch(err){out.innerHTML='<div class="empty"><i data-lucide="wifi-off"></i>辞書を読み込めませんでした。少し待ってからもう一度試してください。</div>';icons()}
 }
 $("dictOut").addEventListener("click",e=>{const b=e.target.closest("[data-look]");if(b)lookup(b.dataset.look)});
 $("dictForm").onsubmit=e=>{e.preventDefault();const q=$("dictQ").value.trim();if(q)lookup(q)};
