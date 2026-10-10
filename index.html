@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#d33a3a">
+<title>英作文添削ノート</title>
+<meta name="description" content="英作文を書いて、文法・スペル・語法の誤りを赤ペンでチェックする無料アプリ">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="英作文添削">
+<script>
+/* ===== 設定（公開する人が書き換える場所） =====
+   使わない項目は空文字 "" のままでOK。空なら何も読み込みません。 */
+window.APP_CONFIG={
+  clarityId:"",        // Microsoft Clarity のプロジェクトID（例："abcd1234ef"）
+  gaId:"",             // Google Analytics の測定ID（例："G-XXXXXXXXXX"）
+  feedbackUrl:"",      // 意見・不具合の受付先（例："https://github.com/ユーザー名/リポジトリ名/issues/new/choose"）
+  repoUrl:""           // GitHub リポジトリのURL（例："https://github.com/ユーザー名/リポジトリ名"）
+};
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<!-- 無料のライブラリ（APIキー不要）：アイコン Lucide／グラフ Chart.js／紙吹雪 canvas-confetti -->
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<style>
+/* Layout: アプリ型。PCは左に答案用紙・右にタブ（添削／辞書／記録）。スマホは下部タブで1画面ずつ切り替え */
+:root{
+  --paper:#eef1f6; --sheet:#ffffff; --rule:#d9e1ec; --ink:#1d2433; --muted:#5d6779;
+  --pen:#d33a3a; --pen-soft:#fbe9e9; --ok:#1f8a5b; --ok-soft:#e3f4ec; --blue:#2f5fb3; --blue-soft:#e6eefb;
+  --amber:#a8650c; --amber-soft:#fbf0dc; --line:#d3dae5; --shadow:0 1px 2px rgba(29,36,51,.06),0 6px 24px rgba(29,36,51,.06);
+  --f-hand:"Klee One","Zen Kaku Gothic New",serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --f-en:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --bar-h:64px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --paper:#10141b; --sheet:#1a202b; --rule:#263042; --ink:#e7ebf2; --muted:#9aa5b8;
+  --pen:#ff7a72; --pen-soft:#3a2124; --ok:#5fd29b; --ok-soft:#173227; --blue:#8bb2ff; --blue-soft:#1d2a44;
+  --amber:#f0b45c; --amber-soft:#3a2d17; --line:#2e394c; --shadow:none; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.7}
+svg.lucide{width:1.1em;height:1.1em;stroke-width:2;flex:none}
+
+/* ---- app bar ---- */
+.appbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+.appbar-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--pen);color:#fff;display:grid;place-items:center;flex:none}
+.logo svg{width:20px;height:20px}
+.brand{display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.brand b{font-family:var(--f-hand);font-size:1.25rem;font-weight:600}
+.brand small{color:var(--muted);font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.appbar .streak{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---- layout ---- */
+.layout{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 40px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:20px;align-items:start}
+.card{background:var(--sheet);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-width:0}
+.panel{padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+#side{position:sticky;top:calc(76px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;max-height:calc(100vh - 96px - env(safe-area-inset-top,0px));overflow:hidden}
+#side .panels{overflow-y:auto;overscroll-behavior:contain}
+#side .panel{display:none}
+body[data-tab=result] #p-result,body[data-tab=dict] #p-dict,body[data-tab=stats] #p-stats{display:flex}
+
+.tabs{display:flex;gap:4px;padding:6px;border-bottom:1px solid var(--line);flex:none}
+.tabs button{flex:1;border:0;background:transparent;color:var(--muted);border-radius:9px;padding:8px 10px;font-weight:700;font-size:.9rem;justify-content:center}
+.tabs button[aria-selected=true]{background:var(--pen-soft);color:var(--pen)}
+
+.bottombar{display:none}
+@media (max-width:899px){
+  .layout{grid-template-columns:minmax(0,1fr);padding-bottom:calc(var(--bar-h) + 28px + env(safe-area-inset-bottom,0px))}
+  #side{position:static;max-height:none;overflow:visible}
+  #side .tabs{display:none}
+  #p-write{display:none}
+  body[data-view=write] #p-write{display:flex}
+  body[data-view=write] #side{display:none}
+  .appbar .brand small{display:none}
+  .bottombar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--sheet);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}
+  .bottombar button{flex:1;flex-direction:column;gap:2px;border:0;background:transparent;color:var(--muted);font-size:.72rem;font-weight:700;padding:6px 0;justify-content:center;position:relative}
+  .bottombar button svg{width:22px;height:22px}
+  .bottombar button[aria-selected=true]{color:var(--pen)}
+  .bottombar .dot{position:absolute;top:2px;left:calc(50% + 8px);min-width:18px;height:18px;border-radius:99px;background:var(--pen);color:#fff;font-size:.68rem;display:grid;place-items:center;padding:0 5px}
+}
+
+/* ---- controls ---- */
+.label{font-size:.75rem;letter-spacing:.12em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,input[type=text]{font:inherit;color:var(--ink);background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:9px 12px;min-width:0}
+select{flex:1 1 220px}
+input[type=text]{flex:1 1 160px}
+.prompt{font-family:var(--f-hand);font-size:1.05rem;background:var(--blue-soft);border-radius:10px;padding:12px 14px;display:flex;gap:10px}
+.prompt svg{color:var(--blue);margin-top:5px}
+.prompt small{display:block;font-family:var(--f-body);color:var(--muted);font-size:.8rem}
+textarea{font-family:var(--f-en);font-size:1.08rem;line-height:32px;color:var(--ink);width:100%;min-height:240px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:4px 14px;
+  background-color:var(--sheet);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,var(--rule) 31px,var(--rule) 32px);background-attachment:local;background-position:0 4px}
+textarea:focus,select:focus,input:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.wcbar{height:4px;border-radius:99px;background:var(--rule);overflow:hidden}
+.wcbar i{display:block;height:100%;background:var(--blue);transition:width .2s}
+.wcbar i.ok{background:var(--ok)}
+button,.btn{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--sheet);color:var(--ink);padding:9px 14px;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+button.primary{background:var(--pen);border-color:var(--pen);color:#fff;font-weight:700;padding:12px 22px}
+button.primary:hover{filter:brightness(1.05)}
+button:disabled{opacity:.55;cursor:wait}
+button.ghost{border-color:transparent;color:var(--muted);padding-inline:8px}
+button.small{padding:4px 10px;font-size:.84rem}
+.opts{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:.86rem;color:var(--muted)}
+.opts label{display:flex;align-items:center;gap:6px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.actions .primary{flex:1 1 auto;justify-content:center}
+.spin{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---- result ---- */
+.verdict{display:flex;gap:16px;align-items:center}
+.stamp{flex:none;width:92px;height:92px;border-radius:50%;border:3px solid var(--pen);color:var(--pen);display:grid;place-items:center;text-align:center;font-family:var(--f-hand);transform:rotate(-8deg);line-height:1.1}
+.stamp b{font-size:2rem;font-variant-numeric:tabular-nums}
+.stamp span{font-size:.68rem}
+.stamp.good{border-color:var(--ok);color:var(--ok)}
+.verdict h2{font-family:var(--f-hand);font-size:1.35rem;margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.chip{font-size:.78rem;font-weight:700;border-radius:99px;padding:2px 10px;display:inline-flex;align-items:center;gap:4px}
+.chip.r{background:var(--pen-soft);color:var(--pen)}
+.chip.b{background:var(--blue-soft);color:var(--blue)}
+.chip.g{background:var(--ok-soft);color:var(--ok)}
+.marked{font-family:var(--f-en);font-size:1.06rem;line-height:2.15;border-left:3px solid var(--rule);padding-left:14px;overflow-wrap:anywhere;white-space:pre-wrap}
+.marked del{color:var(--pen);text-decoration-thickness:2px}
+.marked ins{text-decoration:none;color:var(--pen);font-family:var(--f-hand);font-weight:600;background:var(--pen-soft);border-radius:3px;padding:0 3px}
+.marked mark{background:var(--amber-soft);color:var(--ink);border-bottom:2px wavy var(--amber);border-radius:2px}
+.marked sup{font-family:var(--f-body);font-size:.65rem;color:var(--muted);margin-left:1px}
+.marked .w{cursor:pointer;border-radius:3px}
+.marked .w:hover{background:var(--blue-soft)}
+.list{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
+.item{border:1px solid var(--line);border-left:4px solid var(--pen);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.item.minor{border-left-color:var(--blue)}
+.item .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.num{font-size:.75rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.item .pair{font-family:var(--f-en);overflow-wrap:anywhere}
+.item .pair s{color:var(--pen)}
+.item p{margin:0;font-size:.9rem}
+.item .en{font-size:.84rem;color:var(--muted)}
+.reps{display:flex;flex-wrap:wrap;gap:6px}
+.reps button{font-family:var(--f-en);padding:3px 10px;font-size:.92rem;border-color:var(--ok);color:var(--ok)}
+.clean{font-family:var(--f-en);background:var(--paper);border-radius:10px;padding:12px 14px;overflow-wrap:anywhere;margin:0;white-space:pre-wrap}
+.note{font-size:.84rem;background:var(--amber-soft);border-radius:10px;padding:8px 12px;margin:0;display:flex;gap:8px}
+.note svg{color:var(--amber);margin-top:4px}
+.example{font-size:.78rem;color:var(--muted);border:1px dashed var(--line);border-radius:99px;padding:2px 10px;align-self:flex-start}
+.empty{color:var(--muted);text-align:center;padding:32px 12px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.empty svg{width:36px;height:36px;color:var(--line)}
+
+/* ---- dict ---- */
+.dict{display:flex;flex-direction:column;gap:8px;min-width:0}
+.dict h3{margin:0;font-family:var(--f-en);font-size:1.5rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.dict h3 small{font-family:var(--f-body);font-size:.9rem;color:var(--muted);font-weight:400}
+.dict ol{margin:0;padding-left:1.3em;font-size:.92rem}
+.dict li{margin-bottom:6px}
+.pos{font-size:.75rem;font-weight:700;color:var(--blue);letter-spacing:.06em;text-transform:uppercase}
+.dict .ex{font-style:italic;color:var(--muted);font-family:var(--f-en)}
+.syn{display:flex;flex-wrap:wrap;gap:6px}
+.syn button{font-family:var(--f-en);padding:2px 10px;font-size:.88rem}
+
+/* ---- stats ---- */
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.kpi{background:var(--paper);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column}
+.kpi span{font-size:.75rem;color:var(--muted)}
+.kpi b{font-size:1.5rem;font-variant-numeric:tabular-nums;font-family:var(--f-hand)}
+.chartbox{position:relative;height:200px}
+.hist{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.hist button{width:100%;justify-content:space-between;font-size:.88rem}
+.hist .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-family:var(--f-en)}
+.hist .s{color:var(--pen);flex:none;font-variant-numeric:tabular-nums}
+
+/* ---- 入力ツール・設定 ---- */
+.status{font-size:.88rem;color:var(--muted)}
+.status.err{color:var(--pen)}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.tools button{font-size:.86rem;padding:6px 12px}
+.tools button.rec{background:var(--pen);border-color:var(--pen);color:#fff}
+.tools input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.iconbtn{border:0;background:transparent;color:var(--muted);padding:8px;border-radius:10px}
+.iconbtn:hover{background:var(--line)}
+.iconbtn svg{width:20px;height:20px}
+.net{display:none;align-items:center;gap:4px;font-size:.78rem;color:var(--amber);font-weight:700}
+body.offline .net{display:flex}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--sheet);color:var(--ink);padding:0;width:min(520px,calc(100% - 32px));max-height:calc(100% - 48px);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(16,20,27,.45)}
+.dlg{padding:20px;display:flex;flex-direction:column;gap:16px}
+.dlg h2{margin:0;font-family:var(--f-hand);font-size:1.3rem;display:flex;align-items:center;gap:8px}
+.dlg h2 .iconbtn{margin-left:auto}
+.dlg section{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
+.dlg p{margin:0;font-size:.86rem;color:var(--muted)}
+.dlg label.sw{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.92rem}
+.ai{border:1px dashed var(--blue);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.ai .clean{background:var(--blue-soft)}
+.progress{height:4px;border-radius:99px;background:var(--rule);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--blue);width:0;transition:width .2s}
+
+/* ---- toast & footer ---- */
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;background:var(--ink);color:var(--sheet);border-radius:12px;padding:10px 16px;font-size:.88rem;line-height:1.55;z-index:50;width:max-content;max-width:min(440px,calc(100% - 32px));box-shadow:0 8px 24px rgba(0,0,0,.2);transition:.25s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--pen);color:#fff}
+@media (max-width:899px){.toast{bottom:calc(var(--bar-h) + 16px + env(safe-area-inset-bottom,0px))}}
+footer{max-width:1180px;margin:0 auto;padding:0 16px 24px;font-size:.78rem;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+@media (max-width:899px){footer{padding-bottom:calc(var(--bar-h) + 24px + env(safe-area-inset-bottom,0px))}}
+footer a{color:var(--blue)}
+@media (prefers-reduced-motion:no-preference){.stamp{animation:stamp .35s ease-out}@keyframes stamp{from{transform:rotate(-8deg) scale(1.4);opacity:0}to{transform:rotate(-8deg) scale(1);opacity:1}}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}.toast{transition:none}}
+</style>
+</head>
+<body data-view="write" data-tab="result">
+
+<header class="appbar">
+  <div class="appbar-in">
+    <div class="logo"><i data-lucide="pen-line"></i></div>
+    <div class="brand"><b>英作文添削ノート</b><small>書いて、赤ペンで直して、単語を調べる</small></div>
+    <div class="streak" id="streak" title="これまでのチェック回数"><i data-lucide="flame"></i><span>0回</span></div>
+    <span class="net" title="オフラインです"><i data-lucide="wifi-off"></i>オフライン</span>
+    <button class="iconbtn" id="openSettings" aria-label="設定とその他"><i data-lucide="settings"></i></button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 答案用紙 -->
+  <section class="card panel" id="p-write" aria-label="英作文を書く">
+    <div class="label"><i data-lucide="list-checks"></i>お題</div>
+    <div class="row"><select id="topic" aria-label="お題を選ぶ"></select></div>
+    <input type="text" id="custom" placeholder="自由なお題を入力（例：あなたの夢について）" hidden>
+    <div class="prompt"><i data-lucide="message-square-quote"></i><div id="promptBox"></div></div>
+    <div class="label"><i data-lucide="notebook-pen"></i>解答欄</div>
+    <div class="tools">
+      <button type="button" id="mic" hidden><i data-lucide="mic"></i><span>音声で入力</span></button>
+      <label><button type="button" id="photoBtn"><i data-lucide="camera"></i><span>写真から読み取る</span></button><input type="file" id="photo" accept="image/*" tabindex="-1"></label>
+    </div>
+    <div class="progress" id="ocrProg" hidden><i></i></div>
+    <textarea id="essay" spellcheck="false" aria-label="英作文" data-clarity-mask="true"></textarea>
+    <div class="wcbar" aria-hidden="true"><i id="wcbar" style="width:0"></i></div>
+    <div class="meta"><span id="wc">0 words</span><span id="target"></span></div>
+    <div class="opts">
+      <label><input type="checkbox" id="picky" checked>細かい点も指摘する</label>
+      <label>英語の種類
+        <select id="variant" style="flex:none;padding:4px 8px">
+          <option value="en-US">アメリカ英語</option>
+          <option value="en-GB">イギリス英語</option>
+        </select></label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="check"><i data-lucide="sparkles"></i><span>チェックする</span></button>
+      <button id="speak" aria-label="答案を読み上げ"><i data-lucide="volume-2"></i>読み上げ</button>
+      <button class="ghost" id="clear"><i data-lucide="eraser"></i>消す</button>
+    </div>
+  </section>
+
+  <!-- 右側：添削／辞書／記録 -->
+  <section class="card" id="side">
+    <nav class="tabs" role="tablist" aria-label="表示の切り替え">
+      <button role="tab" data-go="result" aria-selected="true"><i data-lucide="file-check-2"></i>添削結果</button>
+      <button role="tab" data-go="dict" aria-selected="false"><i data-lucide="book-open"></i>辞書</button>
+      <button role="tab" data-go="stats" aria-selected="false"><i data-lucide="chart-line"></i>記録</button>
+    </nav>
+    <div class="panels">
+      <div class="panel" id="p-result" role="tabpanel" aria-label="添削結果" data-clarity-mask="true"></div>
+
+      <div class="panel" id="p-dict" role="tabpanel" aria-label="辞書">
+        <div class="label"><i data-lucide="book-open"></i>英英辞書</div>
+        <form class="row" id="dictForm">
+          <input type="text" id="dictQ" placeholder="調べたい英単語（例：contact）" autocomplete="off" autocapitalize="off">
+          <button type="submit"><i data-lucide="search"></i>調べる</button>
+        </form>
+        <div id="dictOut"><div class="empty"><i data-lucide="mouse-pointer-click"></i>添削結果の単語をタップするか、上の欄に入力してください。</div></div>
+      </div>
+
+      <div class="panel" id="p-stats" role="tabpanel" aria-label="記録">
+        <div id="statsOut"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>文法チェック：<a href="https://languagetool.org" target="_blank">LanguageTool</a>（無料の公開API）／辞書：<a href="https://dictionaryapi.dev" target="_blank">Free Dictionary API</a>／類語：<a href="https://www.datamuse.com/api/" target="_blank">Datamuse API</a>／アイコン：<a href="https://lucide.dev" target="_blank">Lucide</a>／グラフ：<a href="https://www.chartjs.org" target="_blank">Chart.js</a></span>
+  <span id="footFeedback" hidden>ご意見・不具合の報告は<a id="footFeedbackLink" target="_blank" rel="noopener">こちら</a>へ。</span>
+  <span>音声入力・写真の読み取り（Tesseract.js）・端末内AIは、対応するブラウザでのみ使えます。写真の文字読み取りは端末の中で行います。</span>
+  <span id="footAnalytics" hidden>改善のため、アクセス解析ツールで利用状況（押したボタンなど）を記録しています。答案の文章は送りません。</span>
+  <span>「チェックする」を押すと、入力した英文が LanguageTool のサーバーに送信されます。個人情報は書かないでください。点数はミスの数から出した目安です。</span>
+</footer>
+
+<nav class="bottombar" role="tablist" aria-label="画面の切り替え">
+  <button role="tab" data-go="write" aria-selected="true"><i data-lucide="notebook-pen"></i>書く</button>
+  <button role="tab" data-go="result" aria-selected="false"><i data-lucide="file-check-2"></i>添削<span class="dot" id="dot" hidden></span></button>
+  <button role="tab" data-go="dict" aria-selected="false"><i data-lucide="book-open"></i>辞書</button>
+  <button role="tab" data-go="stats" aria-selected="false"><i data-lucide="chart-line"></i>記録</button>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog id="settings" aria-label="設定とその他">
+  <div class="dlg">
+    <h2><i data-lucide="settings"></i>設定とその他<button class="iconbtn" id="closeSettings" aria-label="閉じる"><i data-lucide="x">×</i></button></h2>
+    <section>
+      <label class="sw">効果音を鳴らす<input type="checkbox" id="sfx" checked></label>
+      <p>チェックが終わったときと、90点以上のときに音が鳴ります。</p>
+    </section>
+    <section id="installSec">
+      <div class="label"><i data-lucide="smartphone"></i>アプリとして使う</div>
+      <p id="installText">ホーム画面に追加すると、アプリのように開けます。電波がなくても画面は開けます（文法チェックと辞書は通信が必要です）。</p>
+      <div class="row"><button type="button" id="installBtn" hidden><i data-lucide="download"></i>ホーム画面に追加</button></div>
+    </section>
+    <section>
+      <div class="label"><i data-lucide="archive"></i>記録のバックアップ</div>
+      <p>記録はこの端末のブラウザだけに保存されています。機種変更のときは書き出して、新しい端末で読み込んでください。</p>
+      <div class="row">
+        <button type="button" id="exportBtn"><i data-lucide="file-down"></i>書き出す</button>
+        <label><button type="button" id="importBtn"><i data-lucide="file-up"></i>読み込む</button><input type="file" id="importFile" accept="application/json,.json" hidden></label>
+        <button type="button" class="ghost" id="resetBtn"><i data-lucide="trash-2"></i>記録を消す</button>
+      </div>
+      <p id="resetConfirm" hidden>本当に消しますか？元に戻せません。 <button type="button" class="small" id="resetYes">消す</button> <button type="button" class="small ghost" id="resetNo">やめる</button></p>
+    </section>
+    <section id="feedbackSec" hidden>
+      <div class="label"><i data-lucide="message-circle-heart"></i>意見・不具合の報告</div>
+      <p>使いにくいところ、間違った指摘、ほしい機能を教えてください。アプリの改善に使います。</p>
+      <div class="row"><a class="btn" id="feedbackLink" target="_blank" rel="noopener"><i data-lucide="send"></i>意見を送る</a>
+        <a class="btn" id="repoLink" target="_blank" rel="noopener" hidden><i data-lucide="github"></i>GitHub</a></div>
+    </section>
+  </div>
+</dialog>
+
+<script>
+const TOPICS=[
+  {id:"smartphone",ja:"高校生がスマートフォンを学校に持ち込むことに賛成か反対か。理由を2つ挙げて述べなさい。",min:80,max:100},
+  {id:"online",ja:"オンライン授業と対面授業、どちらが良いと思うか。あなたの意見を述べなさい。",min:80,max:100},
+  {id:"travel",ja:"これまでに行った中で一番印象に残っている場所について説明しなさい。",min:60,max:80},
+  {id:"aijob",ja:"AIの発達によって人の仕事は減ると思うか。あなたの考えを述べなさい。",min:100,max:120},
+  {id:"weekend",ja:"先週末にしたことを英語で書きなさい。",min:40,max:60},
+  {id:"s_tr1",ja:"【短文・和文英訳】私は毎朝7時に起きます。",min:1,max:15},
+  {id:"s_tr2",ja:"【短文・和文英訳】昨日は雨だったので、家で本を読みました。",min:1,max:15},
+  {id:"s_tr3",ja:"【短文・和文英訳】もしもっと時間があれば、海外を旅行したい。",min:1,max:15},
+  {id:"s_tr4",ja:"【短文・和文英訳】彼女は3年間ずっと英語を勉強しています。",min:1,max:15},
+  {id:"s_tr5",ja:"【短文・和文英訳】この本は私が今まで読んだ中で一番おもしろい。",min:1,max:15},
+  {id:"s_food",ja:"【短文】好きな食べ物とその理由を1〜2文で書きなさい。",min:10,max:25},
+  {id:"s_self",ja:"【短文】自己紹介を2〜3文で書きなさい。",min:15,max:30},
+  {id:"s_today",ja:"【短文】今日あったことを1〜2文で書きなさい。",min:10,max:25},
+  {id:"s_season",ja:"【短文】好きな季節とその理由を書きなさい。",min:15,max:30},
+  {id:"s_dream",ja:"【短文】将来やってみたいことを1〜2文で書きなさい。",min:10,max:25},
+  {id:"free",ja:"自由英作文（お題を自分で入力）",min:0,max:0}
+];
+const EXAMPLE_TEXT="I agree that high school students bring smartphones to school. First, smartphone is useful for study. Students can look up words they dont know quickly. Second, it is important for safty. If a disaster happen, students can contact with their family. For these reasons, i think that bringing smartphones should be allowed.";
+
+const CAT_JA={TYPOS:"スペル",GRAMMAR:"文法",PUNCTUATION:"句読点",CASING:"大文字・小文字",TYPOGRAPHY:"記号・スペース",COLLOCATIONS:"語の組み合わせ",CONFUSED_WORDS:"混同しやすい語",REDUNDANCY:"重複表現",STYLE:"表現・文体",SEMANTICS:"意味",MISC:"その他",NONSTANDARD_PHRASES:"不自然な言い回し",PLAIN_ENGLISH:"わかりやすさ",REPETITIONS_STYLE:"繰り返し",AMERICAN_ENGLISH_STYLE:"米語の表現",BRITISH_ENGLISH:"英語の地域差",CREATIVE_WRITING:"文章表現",TEXT_ANALYSIS:"文章分析",GENDER_NEUTRALITY:"中立的な表現"};
+const MINOR_TYPES=new Set(["style","locale-violation","register","typographical","whitespace","uncategorized"]);
+const HINT_JA=[
+  [/AGREEMENT|HE_VERB|SINGULAR|PLURAL_VERB|3SG|NON3PRS|PERS_PRONOUN_AGREEMENT/i,"主語と動詞の形（三単現の s など）が合っていません。"],
+  [/EN_A_VS_AN|A_VS_AN/i,"母音の音で始まる語の前は an、子音の音なら a です。"],
+  [/MORFOLOGIK|SPELL/i,"つづりが間違っている可能性があります。"],
+  [/UPPERCASE_SENTENCE_START/i,"文の最初の文字は大文字にします。"],
+  [/I_LOWERCASE|LOWERCASE_I/i,"一人称の I は常に大文字です。"],
+  [/APOSTROPHE|DONT|CONTRACTION/i,"短縮形にはアポストロフィ（'）が必要です。"],
+  [/DISCUSS_ABOUT|CONTACT_WITH|ENTER_IN|MARRY_WITH|REACH_TO|TRANSITIVE/i,"この動詞は他動詞なので前置詞は要りません。"],
+  [/MISSING_DETERMINER|DT_|ARTICLE|THE_SUPERLATIVE/i,"冠詞（a / an / the）が抜けているか、使い方が違います。"],
+  [/COMMA|PUNCTUATION/i,"カンマやピリオドの使い方を確認してください。"],
+  [/WHITESPACE|DOUBLE_PUNCT|SPACE/i,"スペースの入れ方を確認してください。"],
+  [/PAST|TENSE|HAVE_PART|BEEN_PART|DID_BASEFORM|MD_BASEFORM|MODAL/i,"動詞の形（時制・原形・過去分詞）を確認してください。"],
+  [/PREPOSITION|IN_ON_AT|ARRIVE|ON_MONDAY/i,"前置詞の使い方を確認してください。"],
+  [/ENGLISH_WORD_REPEAT|WORD_REPEAT|DUPLICATE/i,"同じ語が続いています。"],
+  [/MANY_NN_U|UNCOUNTABLE|MUCH_COUNTABLE/i,"数えられる名詞・数えられない名詞の使い方を確認してください。"],
+  [/LOOK_FORWARD|TO_NON_BASE|GERUND|INFINITIVE/i,"不定詞（to＋原形）と動名詞（-ing）の使い分けを確認してください。"]
+];
+function hintJa(m){for(const [re,t] of HINT_JA){if(re.test(m.rule?.id||""))return t}return ""}
+
+const $=id=>document.getElementById(id);
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function words(s){return (s.trim().match(/[A-Za-z0-9'’-]+/g)||[]).length}
+function icons(){if(window.lucide)lucide.createIcons()}
+const reduceMotion=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const isMobile=()=>matchMedia("(max-width: 899px)").matches;
+
+/* ---------- 画面の切り替え ---------- */
+function go(v){
+  if(v==="write"&&!isMobile())v=document.body.dataset.tab;
+  document.body.dataset.view=v;
+  if(v!=="write")document.body.dataset.tab=v;
+  document.querySelectorAll("[data-go]").forEach(b=>{
+    const inBottom=b.closest(".bottombar");
+    b.setAttribute("aria-selected",String(inBottom?b.dataset.go===document.body.dataset.view:b.dataset.go===document.body.dataset.tab));
+  });
+  if(v==="result")$("dot").hidden=true;
+  if(v==="stats")renderStats();
+  if(isMobile())window.scrollTo({top:0,behavior:reduceMotion?"auto":"smooth"});
+}
+document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+
+let toastT;
+function toast(msg,err){const t=$("toast");t.textContent=msg;t.className="toast show"+(err?" err":"");clearTimeout(toastT);toastT=setTimeout(()=>t.className="toast"+(err?" err":""),err?4500:2500)}
+
+/* ---------- お題 ---------- */
+TOPICS.forEach(t=>{const o=document.createElement("option");o.value=t.id;o.textContent=t.id==="free"||t.ja.length<=26?t.ja:t.ja.slice(0,26)+"…";$("topic").append(o)});
+function curTopic(){return TOPICS.find(t=>t.id===$("topic").value)||TOPICS[0]}
+function renderTopic(){
+  const t=curTopic();$("custom").hidden=t.id!=="free";
+  $("promptBox").innerHTML="";
+  const d=document.createElement("div");d.textContent=t.id==="free"?"自由に書きましょう。お題は上の欄に入力できます。":t.ja;$("promptBox").append(d);
+  if(t.max){const s=document.createElement("small");s.textContent=`目安：${t.min}〜${t.max}語`;$("promptBox").append(s)}
+  $("target").textContent=t.max?`目安 ${t.min}–${t.max}語`:"";
+}
+function updWC(){
+  const n=words($("essay").value),t=curTopic();
+  $("wc").textContent=n+" words";
+  const pct=t.max?Math.min(100,n/t.min*100):Math.min(100,n);
+  $("wcbar").style.width=pct+"%";$("wcbar").className=t.max&&n>=t.min?"ok":"";
+  store.set("draft",{text:$("essay").value,topic:$("topic").value,custom:$("custom").value});
+}
+
+/* ---------- LanguageTool ---------- */
+let lastCall=0;
+async function languageTool(text){
+  const wait=3200-(Date.now()-lastCall);
+  if(wait>0)await new Promise(r=>setTimeout(r,wait));
+  lastCall=Date.now();
+  const body=new URLSearchParams({text,language:$("variant").value,motherTongue:"ja-JP"});
+  if($("picky").checked)body.set("level","picky");
+  const res=await fetch("https://api.languagetool.org/v2/check",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Accept":"application/json"},body});
+  if(res.status===429)throw new Error("rate");
+  if(!res.ok)throw new Error("http "+res.status);
+  return res.json();
+}
+function toItems(data){
+  const ms=(data.matches||[]).slice().sort((a,b)=>a.offset-b.offset);
+  const out=[];let end=-1;
+  ms.forEach(m=>{if(m.offset<end)return;end=m.offset+m.length;
+    const it=(m.rule?.issueType||"").toLowerCase();
+    out.push({offset:m.offset,length:m.length,message:m.message,
+      reps:(m.replacements||[]).slice(0,4).map(r=>r.value),
+      cat:CAT_JA[m.rule?.category?.id]||m.rule?.category?.name||"指摘",
+      minor:MINOR_TYPES.has(it)||m.rule?.category?.id==="STYLE",
+      hint:hintJa(m)});
+  });
+  return out;
+}
+function applyFixes(text,items){
+  let s=text;
+  items.slice().sort((a,b)=>b.offset-a.offset).forEach(i=>{if(!i.minor&&i.reps.length)s=s.slice(0,i.offset)+i.reps[0]+s.slice(i.offset+i.length)});
+  return s;
+}
+function scoreOf(text,items){
+  const n=Math.max(words(text),1);
+  const major=items.filter(i=>!i.minor).length, minor=items.length-major;
+  return Math.max(0,Math.min(100,Math.round(100-(major+minor*0.3)/n*400)));
+}
+
+/* ---------- 添削結果 ---------- */
+function wordSpans(s){return esc(s).replace(/[A-Za-z][A-Za-z'’-]*/g,w=>`<span class="w" data-w="${w}">${w}</span>`)}
+function renderResult(text,items,isExample){
+  const score=scoreOf(text,items), major=items.filter(i=>!i.minor).length, minor=items.length-major;
+  const verdict=items.length===0?"誤りは見つかりませんでした":major===0?"ほぼ正しい":major<=2?"一部に誤りあり":"誤りが多い";
+  let html="",pos=0;
+  items.forEach((i,n)=>{
+    html+=wordSpans(text.slice(pos,i.offset));
+    const orig=text.slice(i.offset,i.offset+i.length);
+    html+=i.reps.length&&!i.minor?`<del>${esc(orig)}</del> <ins>${esc(i.reps[0])}</ins><sup>${n+1}</sup>`:`<mark>${esc(orig)}</mark><sup>${n+1}</sup>`;
+    pos=i.offset+i.length;
+  });
+  html+=wordSpans(text.slice(pos));
+  const t=curTopic(),wc=words(text);
+  const lenNote=t.max&&wc<t.min?`語数が目安（${t.min}語）より ${t.min-wc} 語少なくなっています。`:t.max&&wc>t.max*1.2?`語数が目安（${t.max}語）をかなり超えています。`:"";
+  $("p-result").innerHTML=`
+    ${isExample?'<span class="example">見本：「チェックする」を押すとこの答案を実際にチェックします</span>':""}
+    <div class="verdict">
+      <div class="stamp ${score>=80?"good":""}"><div><b>${score}</b><br><span>/100（目安）</span></div></div>
+      <div><h2>${verdict}</h2>
+        <div class="chips">
+          <span class="chip r"><i data-lucide="circle-x"></i>誤り ${major}</span>
+          <span class="chip b"><i data-lucide="lightbulb"></i>提案 ${minor}</span>
+          <span class="chip g"><i data-lucide="type"></i>${wc} words</span>
+        </div></div>
+    </div>
+    ${lenNote?`<p class="note"><i data-lucide="ruler"></i><span>${lenNote}</span></p>`:""}
+    <div class="label"><i data-lucide="pen-tool"></i>赤ペン（単語をタップすると辞書）</div>
+    <div class="marked">${html}</div>
+    ${items.length?`<div class="label"><i data-lucide="list-ordered"></i>指摘の一覧</div><ul class="list">${items.map((i,n)=>`
+      <li class="item ${i.minor?"minor":""}"><div class="hd"><span class="num">${n+1}</span><span class="chip ${i.minor?"b":"r"}">${esc(i.cat)}</span></div>
+      <div class="pair"><s>${esc(text.slice(i.offset,i.offset+i.length))}</s></div>
+      ${i.hint?`<p>${esc(i.hint)}</p>`:""}
+      <p class="en">${esc(i.message)}</p>
+      ${i.reps.length?`<div class="reps">${i.reps.map(r=>`<button type="button" data-fix="${n}" data-rep="${esc(r)}"><i data-lucide="check"></i>${esc(r)||"（削除）"}</button>`).join("")}</div>`:""}
+      </li>`).join("")}</ul>
+    <div class="label"><i data-lucide="file-pen-line"></i>提案を反映した文</div><p class="clean">${esc(applyFixes(text,items))}</p>
+    <div class="row"><button type="button" class="small" id="applyAll"><i data-lucide="wand-sparkles"></i>誤りの修正をすべて答案に反映</button>
+      <button type="button" class="small" id="sayFixed"><i data-lucide="volume-2"></i>直した文を読み上げ</button></div>`:""}
+    <div id="aiSlot"></div>
+    <p class="note"><i data-lucide="info"></i><span>機械チェックなので、内容や論理（お題に答えているか、和訳の意味が合っているか）は判定できません。見落としや誤検出もあります。</span></p>`;
+  $("p-result")._state={text,items};
+  icons();
+  setupAI(text);
+}
+$("p-result").addEventListener("click",e=>{
+  const w=e.target.closest("[data-w]");if(w){lookup(w.dataset.w);go("dict");return}
+  const st=$("p-result")._state;if(!st)return;
+  const f=e.target.closest("[data-fix]");
+  const stale=()=>{if($("essay").value!==st.text){toast("答案が変わっているので、もう一度チェックしてください。",true);return true}};
+  if(f){if(stale())return;const i=st.items[+f.dataset.fix];
+    $("essay").value=st.text.slice(0,i.offset)+f.dataset.rep+st.text.slice(i.offset+i.length);updWC();check();return}
+  if(e.target.closest("#applyAll")){if(stale())return;$("essay").value=applyFixes(st.text,st.items);updWC();check();return}
+  if(e.target.closest("#sayFixed"))say(applyFixes(st.text,st.items));
+});
+
+/* ---------- 実行 ---------- */
+let busy=false;
+async function check(){
+  if(busy)return;
+  const text=$("essay").value.replace(/\s+$/,"");
+  if(!words(text)){toast("英文を書いてください。",true);return}
+  if(!navigator.onLine){toast("オフラインのため文法チェックできません。電波のある場所で押してください。",true);return}
+  busy=true;const btn=$("check");btn.disabled=true;
+  btn.innerHTML='<i data-lucide="loader-circle" class="spin"></i><span>チェック中…</span>';icons();
+  try{
+    const items=toItems(await languageTool(text));
+    renderResult(text,items,false);
+    const h=store.get("history",[]);h.unshift({at:Date.now(),text,items,topic:$("topic").value});store.set("history",h.slice(0,200));
+    updStreak();
+    const sc=scoreOf(text,items);
+    toast(items.length?`チェックしました：${sc}点`:"誤りは見つかりませんでした！");
+    sfx(sc>=90?"great":"done");track("check",{score:sc,errors:items.length});
+    if(sc>=90&&window.confetti&&!reduceMotion)confetti({particleCount:90,spread:70,origin:{y:.75},colors:["#d33a3a","#2f5fb3","#1f8a5b","#f0b45c"]});
+    if(isMobile())go("result");else if(document.body.dataset.tab!=="result")go("result");
+  }catch(e){
+    toast(e.message==="rate"?"短時間に使いすぎました。1分ほど待ってから押してください。":e instanceof TypeError?"文法チェックのサーバーに接続できませんでした。プレビュー画面では使えないので、GitHub Pages で公開したページで開いてください。":"チェックに失敗しました。少し待ってからもう一度押してください。",true);
+  }finally{busy=false;btn.disabled=false;btn.innerHTML='<i data-lucide="sparkles"></i><span>チェックする</span>';icons()}
+}
+
+/* ---------- 辞書（Free Dictionary API＋Datamuse で類語） ---------- */
+async function lookup(word){
+  word=String(word).replace(/[’']s$/,"").toLowerCase();
+  $("dictQ").value=word;
+  const out=$("dictOut");out.innerHTML='<div class="empty"><i data-lucide="loader-circle" class="spin"></i>調べています…</div>';icons();
+  try{
+    const [res,syn]=await Promise.all([
+      fetch("https://api.dictionaryapi.dev/api/v2/entries/en/"+encodeURIComponent(word)),
+      fetch("https://api.datamuse.com/words?max=8&rel_syn="+encodeURIComponent(word)).then(r=>r.ok?r.json():[]).catch(()=>[])
+    ]);
+    if(res.status===404){
+      const sug=await fetch("https://api.datamuse.com/sug?max=5&s="+encodeURIComponent(word)).then(r=>r.ok?r.json():[]).catch(()=>[]);
+      out.innerHTML=`<div class="empty"><i data-lucide="search-x"></i>「${esc(word)}」は辞書に見つかりませんでした。${sug.length?`<div class="syn">${sug.map(s=>`<button type="button" data-look="${esc(s.word)}">${esc(s.word)}</button>`).join("")}</div><small>もしかして？</small>`:"つづりを確認してください。"}</div>`;icons();return}
+    if(!res.ok)throw 0;
+    const e=(await res.json())[0];
+    const ph=e.phonetic||(e.phonetics||[]).find(p=>p.text)?.text||"";
+    out.innerHTML=`<div class="dict"><h3>${esc(e.word)} <small>${esc(ph)}</small><button type="button" class="small" id="sayWord" aria-label="発音を聞く"><i data-lucide="volume-2"></i></button></h3>
+      ${(e.meanings||[]).slice(0,3).map(m=>`<div><span class="pos">${esc(m.partOfSpeech)}</span><ol>${m.definitions.slice(0,3).map(d=>`<li>${esc(d.definition)}${d.example?`<br><span class="ex">${esc(d.example)}</span>`:""}</li>`).join("")}</ol></div>`).join("")}
+      ${syn.length?`<div class="label"><i data-lucide="replace"></i>似た意味の語（言い換えに）</div><div class="syn">${syn.map(s=>`<button type="button" data-look="${esc(s.word)}">${esc(s.word)}</button>`).join("")}</div>`:""}</div>`;
+    $("sayWord").onclick=()=>say(e.word);icons();
+  }catch(err){out.innerHTML='<div class="empty"><i data-lucide="wifi-off"></i>辞書を読み込めませんでした。もう一度試してください。</div>';icons()}
+}
+$("dictOut").addEventListener("click",e=>{const b=e.target.closest("[data-look]");if(b)lookup(b.dataset.look)});
+$("dictForm").onsubmit=e=>{e.preventDefault();const q=$("dictQ").value.trim();if(q)lookup(q)};
+
+/* ---------- 読み上げ ---------- */
+function say(text){
+  if(!("speechSynthesis" in window)){toast("このブラウザは読み上げに対応していません。",true);return}
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);u.lang=$("variant").value;u.rate=.95;
+  const v=speechSynthesis.getVoices().find(v=>v.lang===u.lang);if(v)u.voice=v;
+  speechSynthesis.speak(u);
+}
+$("speak").onclick=()=>{const t=$("essay").value.trim();if(t)say(t)};
+
+/* ---------- 記録（Chart.js） ---------- */
+let charts=[];
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function updStreak(){$("streak").querySelector("span").textContent=store.get("history",[]).length+"回"}
+function renderStats(){
+  const h=store.get("history",[]);const out=$("statsOut");
+  charts.forEach(c=>c.destroy());charts=[];
+  if(!h.length){out.innerHTML='<div class="empty"><i data-lucide="chart-line"></i>まだ記録がありません。英文をチェックすると、点数の推移と苦手なミスの種類がここに表示されます。</div>';icons();return}
+  const scores=h.map(x=>scoreOf(x.text,x.items));
+  const avg=Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
+  const cats={};h.forEach(x=>x.items.forEach(i=>{if(!i.minor)cats[i.cat]=(cats[i.cat]||0)+1}));
+  const top=Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  out.innerHTML=`
+    <div class="kpis">
+      <div class="kpi"><span>チェック回数</span><b>${h.length}</b></div>
+      <div class="kpi"><span>平均点</span><b>${avg}</b></div>
+      <div class="kpi"><span>最高点</span><b>${Math.max(...scores)}</b></div>
+    </div>
+    <div class="label"><i data-lucide="trending-up"></i>点数の推移（直近20回）</div>
+    <div class="chartbox"><canvas id="cScore" aria-label="点数の推移"></canvas></div>
+    <div class="label"><i data-lucide="target"></i>多いミスの種類（苦手分析）</div>
+    ${top.length?`<div class="chartbox" style="height:${60+top.length*30}px"><canvas id="cCat" aria-label="ミスの種類"></canvas></div>`:'<p class="status" style="margin:0">まだ誤りの記録がありません。</p>'}
+    <div class="label"><i data-lucide="history"></i>これまでの答案</div>
+    <ul class="hist">${h.slice(0,30).map((x,i)=>{const d=new Date(x.at);return `<li><button type="button" data-h="${i}"><span class="t">${d.getMonth()+1}/${d.getDate()} ${esc(x.text)}</span><span class="s">${scores[i]}点</span></button></li>`}).join("")}</ul>`;
+  icons();
+  if(!window.Chart)return;
+  const ink=css("--muted"),grid=css("--rule"),pen=css("--pen"),blue=css("--blue");
+  Chart.defaults.font.family=css("--f-body");Chart.defaults.color=ink;
+  const recent=h.slice(0,20).reverse();
+  charts.push(new Chart($("cScore"),{type:"line",
+    data:{labels:recent.map(x=>{const d=new Date(x.at);return `${d.getMonth()+1}/${d.getDate()}`}),
+      datasets:[{data:recent.map(x=>scoreOf(x.text,x.items)),borderColor:pen,backgroundColor:pen+"22",fill:true,tension:.3,pointRadius:3,pointBackgroundColor:pen}]},
+    options:{maintainAspectRatio:false,animation:reduceMotion?false:undefined,plugins:{legend:{display:false}},
+      scales:{y:{min:0,max:100,ticks:{stepSize:20},grid:{color:grid}},x:{grid:{display:false}}}}}));
+  if(top.length)charts.push(new Chart($("cCat"),{type:"bar",
+    data:{labels:top.map(t=>t[0]),datasets:[{data:top.map(t=>t[1]),backgroundColor:blue,borderRadius:6,barThickness:16}]},
+    options:{indexAxis:"y",maintainAspectRatio:false,animation:reduceMotion?false:undefined,plugins:{legend:{display:false}},
+      scales:{x:{beginAtZero:true,ticks:{precision:0},grid:{color:grid}},y:{grid:{display:false}}}}}));
+}
+$("statsOut").addEventListener("click",e=>{const b=e.target.closest("[data-h]");if(!b)return;
+  const x=store.get("history",[])[+b.dataset.h];if(!x)return;
+  if(x.topic)$("topic").value=x.topic;renderTopic();$("essay").value=x.text;updWC();renderResult(x.text,x.items,false);go("result")});
+
+/* ---------- 分析ツール（APP_CONFIG に ID を書いたときだけ読み込む） ---------- */
+const CFG=window.APP_CONFIG||{};
+function loadScript(src){return new Promise((ok,ng)=>{const s=document.createElement("script");s.src=src;s.async=true;s.onload=ok;s.onerror=ng;document.head.append(s)})}
+if(CFG.clarityId){(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y)})(window,document,"clarity","script",CFG.clarityId)}
+if(CFG.gaId){window.dataLayer=window.dataLayer||[];window.gtag=function(){dataLayer.push(arguments)};gtag("js",new Date());gtag("config",CFG.gaId);loadScript("https://www.googletagmanager.com/gtag/js?id="+encodeURIComponent(CFG.gaId)).catch(()=>{})}
+if(CFG.clarityId||CFG.gaId)$("footAnalytics").hidden=false;
+function track(name,params){try{if(window.gtag)gtag("event",name,params||{});if(window.clarity)clarity("event",name)}catch(e){}}
+
+/* ---------- 意見・不具合の受付（人の力） ---------- */
+if(CFG.feedbackUrl){$("feedbackSec").hidden=false;$("feedbackLink").href=CFG.feedbackUrl;$("footFeedback").hidden=false;$("footFeedbackLink").href=CFG.feedbackUrl}
+else $("feedbackLink").hidden=true;
+if(CFG.repoUrl){$("feedbackSec").hidden=false;$("repoLink").hidden=false;$("repoLink").href=CFG.repoUrl}
+$("feedbackLink").addEventListener("click",()=>track("feedback_open"));
+
+/* ---------- 効果音（Web Audio で合成。音声ファイル不要） ---------- */
+let actx=null;
+function unlockAudio(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();if(actx.state==="suspended")actx.resume()}catch(e){}}
+document.addEventListener("pointerdown",unlockAudio,{passive:true});
+function sfx(kind){
+  if(!store.get("sfx",true)||!actx)return;
+  try{
+    const notes=kind==="great"?[523.25,659.25,783.99,1046.5]:[659.25,987.77];
+    const t0=actx.currentTime+.02;
+    notes.forEach((f,i)=>{const o=actx.createOscillator(),g=actx.createGain();o.type="triangle";o.frequency.value=f;
+      const t=t0+i*.09;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.16,t+.01);g.gain.exponentialRampToValueAtTime(.001,t+.35);
+      o.connect(g).connect(actx.destination);o.start(t);o.stop(t+.4)});
+  }catch(e){}
+}
+
+/* ---------- 音声入力（Web Speech API の音声認識） ---------- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null;
+if(SR){
+  $("mic").hidden=false;
+  $("mic").onclick=()=>{
+    if(rec){rec.stop();return}
+    rec=new SR();rec.lang=$("variant").value;rec.interimResults=true;rec.continuous=true;
+    const ta=$("essay"),base=ta.value.replace(/\s+$/,"");let fin="";
+    rec.onresult=e=>{let interim="";
+      for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)fin+=r[0].transcript.trim()+" ";else interim+=r[0].transcript}
+      ta.value=(base?base+" ":"")+fin+interim;updWC()};
+    rec.onerror=e=>{if(e.error!=="aborted"&&e.error!=="no-speech")toast(e.error==="not-allowed"?"マイクの使用が許可されていません。ブラウザの設定で許可してください。":"音声を認識できませんでした。",true)};
+    rec.onend=()=>{rec=null;$("mic").classList.remove("rec");$("mic").querySelector("span").textContent="音声で入力";
+      $("essay").value=$("essay").value.replace(/\s+$/,"");updWC()};
+    try{rec.start();$("mic").classList.add("rec");$("mic").querySelector("span").textContent="話し終えたら押す";track("voice_input")}
+    catch(e){rec=null;toast("音声入力を開始できませんでした。",true)}
+  };
+}
+
+/* ---------- 写真から読み取り（Tesseract.js：端末内で文字認識） ---------- */
+$("photoBtn").onclick=()=>$("photo").click();
+$("photo").onchange=async e=>{
+  const f=e.target.files[0];e.target.value="";if(!f)return;
+  const prog=$("ocrProg"),bar=prog.firstElementChild;prog.hidden=false;bar.style.width="5%";
+  try{
+    if(!window.Tesseract){toast("読み取りの準備をしています（初回だけ時間がかかります）");await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js")}
+    const {data}=await Tesseract.recognize(f,"eng",{logger:m=>{if(m.status==="recognizing text")bar.style.width=Math.round(10+m.progress*90)+"%"}});
+    const text=String(data.text||"").replace(/-\n/g,"").replace(/\s*\n\s*/g," ").replace(/\s{2,}/g," ").trim();
+    if(!text){toast("文字を読み取れませんでした。明るい場所で、紙をまっすぐ撮ってください。",true);return}
+    $("essay").value=text;updWC();go("write");
+    toast("読み取りました。間違って読まれた語がないか確認してください。");track("ocr");
+  }catch(err){toast("写真を読み取れませんでした。通信状態を確認して、もう一度試してください。",true)}
+  finally{prog.hidden=true;bar.style.width="0"}
+};
+
+/* ---------- 端末内AI（Chrome の組み込みAI・Proofreader。対応ブラウザだけ表示） ---------- */
+let proofAvail=null;
+async function proofAvailable(){
+  if(proofAvail!==null)return proofAvail;
+  try{
+    if(!("Proofreader" in self)){proofAvail=false;return false}
+    const a=await Proofreader.availability({expectedInputLanguages:["en"]});
+    proofAvail=a!=="unavailable";
+  }catch(e){proofAvail=false}
+  return proofAvail;
+}
+async function setupAI(text){
+  const slot=$("aiSlot");if(!slot||!(await proofAvailable()))return;
+  slot.innerHTML=`<div class="ai"><div class="label"><i data-lucide="cpu"></i>端末内AIでダブルチェック（無料・答案は外に送られません）</div>
+    <p class="status" style="margin:0">ブラウザに入っているAIで、別の方法でもう一度チェックします。初回はAIモデルのダウンロードに時間がかかります。</p>
+    <div class="row"><button type="button" class="small" id="aiRun"><i data-lucide="cpu"></i>端末内AIでチェック</button></div><div id="aiOut"></div></div>`;
+  icons();
+  $("aiRun").onclick=async()=>{
+    const out=$("aiOut");out.innerHTML='<p class="status" style="margin:0">チェック中…</p>';
+    try{
+      const pr=await Proofreader.create({expectedInputLanguages:["en"],monitor(m){m.addEventListener("downloadprogress",ev=>{out.innerHTML=`<p class="status" style="margin:0">AIモデルを準備中… ${Math.round((ev.loaded||0)*100)}%</p>`})}});
+      const r=await pr.proofread(text);
+      const fixed=String(r?.correctedInput??"");
+      out.innerHTML=fixed&&fixed.trim()!==text.trim()
+        ?`<div class="label">端末内AIが直した文</div><p class="clean">${esc(fixed)}</p>`
+        :'<p class="status" style="margin:0">端末内AIでは、追加の誤りは見つかりませんでした。</p>';
+      track("ondevice_ai");
+    }catch(e){out.innerHTML='<p class="status err" style="margin:0">端末内AIを使えませんでした。</p>'}
+  };
+}
+
+/* ---------- PWA（ホーム画面に追加・オフライン） ---------- */
+if("serviceWorker" in navigator&&window.isSecureContext)navigator.serviceWorker.register("sw.js").catch(()=>{});
+let deferredPrompt=null;
+addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;$("installBtn").hidden=false});
+$("installBtn").onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();const r=await deferredPrompt.userChoice;deferredPrompt=null;$("installBtn").hidden=true;track("install",{outcome:r.outcome})};
+const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+if(isIOS)$("installText").textContent="Safari の共有ボタン（四角から上向きの矢印）から「ホーム画面に追加」を選ぶと、アプリのように開けます。電波がなくても画面は開けます（文法チェックと辞書は通信が必要です）。";
+if(matchMedia("(display-mode: standalone)").matches||navigator.standalone)$("installSec").hidden=true;
+function netState(){document.body.classList.toggle("offline",!navigator.onLine)}
+addEventListener("online",()=>{netState();toast("オンラインに戻りました。")});
+addEventListener("offline",()=>{netState();toast("オフラインです。文法チェックと辞書は使えません。",true)});
+netState();
+
+/* ---------- 設定ダイアログ・記録のバックアップ ---------- */
+$("openSettings").onclick=()=>{$("sfx").checked=store.get("sfx",true);$("resetConfirm").hidden=true;$("settings").showModal()};
+$("closeSettings").onclick=()=>$("settings").close();
+$("settings").addEventListener("click",e=>{if(e.target===$("settings"))$("settings").close()});
+$("sfx").onchange=e=>{store.set("sfx",e.target.checked);if(e.target.checked){unlockAudio();sfx("done")}};
+$("exportBtn").onclick=()=>{
+  const data={app:"eisakubun",version:1,exportedAt:new Date().toISOString(),history:store.get("history",[])};
+  const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+  const a=document.createElement("a"),d=new Date();a.href=URL.createObjectURL(blob);
+  a.download=`eisakubun-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}.json`;
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast("記録を書き出しました。");track("export");
+};
+$("importBtn").onclick=()=>$("importFile").click();
+$("importFile").onchange=async e=>{
+  const f=e.target.files[0];e.target.value="";if(!f)return;
+  try{
+    const d=JSON.parse(await f.text());const inc=Array.isArray(d.history)?d.history:[];
+    if(!inc.length||!inc.every(x=>x&&typeof x.text==="string"&&Array.isArray(x.items)&&typeof x.at==="number"))throw 0;
+    const cur=store.get("history",[]);const seen=new Set(cur.map(x=>x.at+"|"+x.text));
+    const merged=cur.concat(inc.filter(x=>!seen.has(x.at+"|"+x.text))).sort((a,b)=>b.at-a.at).slice(0,200);
+    store.set("history",merged);updStreak();if(document.body.dataset.tab==="stats")renderStats();
+    toast(`${merged.length-cur.length}件の記録を読み込みました。`);
+  }catch(err){toast("このファイルは読み込めませんでした。このアプリで書き出したファイルを選んでください。",true)}
+};
+$("resetBtn").onclick=()=>{$("resetConfirm").hidden=false};
+$("resetNo").onclick=()=>{$("resetConfirm").hidden=true};
+$("resetYes").onclick=()=>{store.set("history",[]);$("resetConfirm").hidden=true;updStreak();renderStats();toast("記録を消しました。")};
+/* ---------- 起動 ---------- */
+const draft=store.get("draft",null);
+if(draft&&draft.text){$("essay").value=draft.text;$("topic").value=draft.topic||"smartphone";$("custom").value=draft.custom||""}
+else{$("topic").value="smartphone";$("essay").value=EXAMPLE_TEXT}
+renderTopic();updWC();updStreak();
+const hist=store.get("history",[]);
+if(hist.length)renderResult(hist[0].text,hist[0].items,false);
+else renderResult(EXAMPLE_TEXT,toItems({matches:[
+  {offset:EXAMPLE_TEXT.indexOf("dont"),length:4,message:"Did you mean \"don't\"?",replacements:[{value:"don't"}],rule:{id:"DONT",issueType:"misspelling",category:{id:"TYPOS"}}},
+  {offset:EXAMPLE_TEXT.indexOf("safty"),length:5,message:"Possible spelling mistake found.",replacements:[{value:"safety"}],rule:{id:"MORFOLOGIK_RULE_EN_US",issueType:"misspelling",category:{id:"TYPOS"}}},
+  {offset:EXAMPLE_TEXT.indexOf("happen,"),length:6,message:"The verb form may be wrong: \"happens\".",replacements:[{value:"happens"}],rule:{id:"HE_VERB_AGR",issueType:"grammar",category:{id:"GRAMMAR"}}},
+  {offset:EXAMPLE_TEXT.indexOf("contact with"),length:12,message:"\"contact\" doesn't need a preposition.",replacements:[{value:"contact"}],rule:{id:"CONTACT_WITH",issueType:"grammar",category:{id:"GRAMMAR"}}},
+  {offset:EXAMPLE_TEXT.indexOf(" i ")+1,length:1,message:"Did you mean \"I\"?",replacements:[{value:"I"}],rule:{id:"I_LOWERCASE",issueType:"misspelling",category:{id:"CASING"}}}
+]}),true);
+go(isMobile()?"write":"result");
+icons();
+
+$("topic").onchange=()=>{renderTopic();updWC()};
+$("custom").oninput=()=>{renderTopic();updWC()};
+$("essay").oninput=updWC;
+$("check").onclick=check;
+$("clear").onclick=()=>{$("essay").value="";updWC();$("essay").focus()};
+$("essay").addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="Enter")check()});
+matchMedia("(max-width: 899px)").addEventListener("change",()=>go(isMobile()?document.body.dataset.view:document.body.dataset.tab));
+</script>
+</body>
+</html>
