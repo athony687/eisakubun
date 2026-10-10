@@ -1,0 +1,16 @@
+{
+  "name": "英作文添削ノート",
+  "short_name": "英作文添削",
+  "description": "英作文を書いて、文法・スペル・語法の誤りを赤ペンでチェックするアプリ",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef1f6",
+  "theme_color": "#d33a3a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
