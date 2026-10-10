@@ -1,6 +1,6 @@
 // オフラインでも画面を開けるようにするサービスワーカー
 // アプリを更新したら VERSION の数字を上げると、古いキャッシュが入れ替わります。
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE = "eisakubun-" + VERSION;
 const SHELL = [
   "./",
@@ -35,7 +35,7 @@ self.addEventListener("fetch", e => {
   // 画面（HTML）はネット優先、つながらなければキャッシュ
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req.url, { cache: "no-cache" }).then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put("./index.html", copy));
         return res;
