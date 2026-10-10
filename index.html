@@ -349,6 +349,62 @@ const TOPICS=[
   {id:"s_dream",ja:"【短文】将来やってみたいことを1〜2文で書きなさい。",min:10,max:25},
   {id:"free",ja:"自由英作文（お題を自分で入力）",min:0,max:0}
 ];
+/* ---------- お題に答えているかの判定（和文英訳は必要な要素、自由英作文はキーワード） ---------- */
+const CONTENT={
+  s_tr1:{type:"tr",need:[
+    [/\b(get|gets|got|getting)\s+up\b|\bwakes?\s+up\b|\bwoke\s+up\b|\brises?\b/i,"「起きる」（get up / wake up）"],
+    [/\b(7|seven)\b/i,"「7時」（at seven / at 7）"],
+    [/\b(every|each)\s+morning\b/i,"「毎朝」（every morning）"]],
+    tense:[/\b(got|woke)\s+up\b/i,"「起きます」は習慣なので現在形（get up）にします。"],
+    models:["I get up at seven every morning.","I wake up at 7 o'clock every morning."]},
+  s_tr2:{type:"tr",need:[
+    [/\brain(ed|y|ing)?\b/i,"「雨」（rainy / it rained）"],
+    [/\byesterday\b/i,"「昨日」（yesterday）"],
+    [/\bread\b/i,"「読んだ」（read）"],
+    [/\bbooks?\b/i,"「本」（a book / books）"],
+    [/\b(at\s+)?home\b|\bhouse\b/i,"「家で」（at home）"],
+    [/\b(because|so|since|as)\b/i,"「〜なので」（because / so）"]],
+    models:["It was rainy yesterday, so I read a book at home.","I read a book at home yesterday because it rained."]},
+  s_tr3:{type:"tr",need:[
+    [/\bif\b/i,"「もし」（if）"],
+    [/\bmore\s+time\b/i,"「もっと時間」（more time）"],
+    [/\btravel(l?ing|l?ed)?\b|\btrip\b|\bgo\b/i,"「旅行する」（travel）"],
+    [/\babroad\b|\boverseas\b|\bforeign\s+countr/i,"「海外」（abroad）"],
+    [/\bhad\b/i,"仮定法過去の「had」（If I had …）"],
+    [/\bwould\b|\bcould\b/i,"仮定法の「would」（I would like to …）"]],
+    models:["If I had more time, I would like to travel abroad.","If I had more time, I would travel overseas."]},
+  s_tr4:{type:"tr",need:[
+    [/\bshe\b/i,"「彼女は」（she）"],
+    [/\bhas\s+been\s+(studying|learning)\b|\bhas\s+(studied|learned|learnt)\b/i,"現在完了（has been studying）"],
+    [/\benglish\b/i,"「英語」（English）"],
+    [/\bfor\s+(three|3)\s+years\b/i,"「3年間」（for three years）"]],
+    models:["She has been studying English for three years.","She has studied English for three years."]},
+  s_tr5:{type:"tr",need:[
+    [/\bthis\s+book\b/i,"「この本」（this book）"],
+    [/\bmost\s+(interesting|exciting)\b|\bbest\b/i,"最上級（the most interesting）"],
+    [/\b(have|'ve)\s+(ever\s+)?read\b|\bever\s+read\b/i,"「今まで読んだ」（I have ever read）"]],
+    models:["This is the most interesting book (that) I have ever read.","This book is the most interesting one I have ever read."]},
+  smartphone:{type:"kw",kw:/smart\s?phones?|\bphones?\b|mobile/i,label:"スマートフォン（smartphone）"},
+  online:{type:"kw",kw:/\bonline\b|face[-\s]to[-\s]face|in[-\s]person|\bclass(es)?\b|\blessons?\b/i,label:"授業（online / face-to-face classes）"},
+  travel:{type:"kw",kw:/\b(went|visited|been|go|place|trip|travel\w*|city|town)\b/i,label:"行った場所（I went to / I visited）"},
+  aijob:{type:"kw",kw:/\bAI\b|artificial\s+intelligence/i,label:"AI（artificial intelligence）"},
+  weekend:{type:"kw",kw:/weekend|saturday|sunday|last\s+week/i,label:"先週末（last weekend）"},
+  s_food:{type:"kw",kw:/\b(food|eat|like|love|favou?rite|delicious)\b/i,label:"好きな食べ物（My favorite food is …）"},
+  s_self:{type:"kw",kw:/\bmy\s+name\b|\bI\s+am\b|\bI'm\b/i,label:"自己紹介（My name is … / I am …）"},
+  s_today:{type:"kw",kw:/\btoday\b|this\s+(morning|afternoon|evening)/i,label:"今日（today）"},
+  s_season:{type:"kw",kw:/\b(spring|summer|autumn|fall|winter)\b/i,label:"季節（spring / summer / autumn / winter）"},
+  s_dream:{type:"kw",kw:/\bwant\s+to\b|\bwould\s+like\b|\bdream\b|\bfuture\b|\bhope\b|\bwish\b/i,label:"やりたいこと（I want to …）"}
+};
+function contentCheck(text,topicId){
+  const c=CONTENT[topicId];if(!c)return null;
+  if(c.type==="kw"){const ok=c.kw.test(text);return {type:"kw",ok,missing:ok?[]:[c.label]}}
+  const missing=c.need.filter(([re])=>!re.test(text)).map(([,l])=>l);
+  const notes=[];if(c.tense&&c.tense[0].test(text))notes.push(c.tense[1]);
+  return {type:"tr",ok:missing.length===0&&!notes.length,missing,notes,total:c.need.length,models:c.models};
+}
+/* お題とまったく関係ない答案か（和文英訳で必要な要素が半分以上ない、または自由英作文でキーワードがない） */
+function offTopic(ct){return !!ct&&(ct.type==="kw"?!ct.ok:ct.missing.length*2>=ct.total)}
+
 const EXAMPLE_TEXT="I agree that high school students bring smartphones to school. First, smartphone is useful for study. Students can look up words they dont know quickly. Second, it is important for safty. If a disaster happen, students can contact with their family. For these reasons, i think that bringing smartphones should be allowed.";
 
 const CAT_JA={TYPOS:"スペル",GRAMMAR:"文法",PUNCTUATION:"句読点",CASING:"大文字・小文字",TYPOGRAPHY:"記号・スペース",COLLOCATIONS:"語の組み合わせ",CONFUSED_WORDS:"混同しやすい語",REDUNDANCY:"重複表現",STYLE:"表現・文体",SEMANTICS:"意味",MISC:"その他",NONSTANDARD_PHRASES:"不自然な言い回し",PLAIN_ENGLISH:"わかりやすさ",REPETITIONS_STYLE:"繰り返し",AMERICAN_ENGLISH_STYLE:"米語の表現",BRITISH_ENGLISH:"英語の地域差",CREATIVE_WRITING:"文章表現",TEXT_ANALYSIS:"文章分析",GENDER_NEUTRALITY:"中立的な表現"};
@@ -429,17 +485,35 @@ async function languageTool(text){
   if(!res.ok)throw new Error("http "+res.status);
   return res.json();
 }
-function toItems(data){
+function toItems(data,text){
   const ms=(data.matches||[]).slice().sort((a,b)=>a.offset-b.offset);
   const out=[];let end=-1;
   ms.forEach(m=>{if(m.offset<end)return;end=m.offset+m.length;
     const it=(m.rule?.issueType||"").toLowerCase();
-    out.push({offset:m.offset,length:m.length,message:m.message,
+    const item={offset:m.offset,length:m.length,message:m.message,
       reps:(m.replacements||[]).slice(0,4).map(r=>r.value),
       cat:CAT_JA[m.rule?.category?.id]||m.rule?.category?.name||"指摘",
       minor:MINOR_TYPES.has(it)||m.rule?.category?.id==="STYLE",
-      hint:hintJa(m)});
+      hint:hintJa(m)};
+    // 大文字で始まる語のスペル指摘は、人名・地名の可能性が高いので減点しない（Yamada → Yamaha のような誤検出を防ぐ）
+    if(text&&it==="misspelling"){
+      const w=text.slice(m.offset,m.offset+m.length);
+      if(/^[A-Z][a-z]+$/.test(w)){item.name=true;item.minor=true;item.reps=[];item.cat="固有名詞？";item.hint="人名・地名などの固有名詞なら、このままで大丈夫です。普通の単語ならつづりを確認してください。"}
+    }
+    out.push(item);
   });
+  // 文末のピリオド
+  if(text){
+    const t=text.replace(/\s+$/,"");
+    if(t&&!/[.!?"”)]$/.test(t)){
+      const last=out.find(i=>i.offset+i.length>=t.length);
+      const m=t.match(/[A-Za-z0-9'’-]+$/);
+      if(last&&last.name){  // 文末の固有名詞は「ピリオド抜け」として1つにまとめる
+        const w=t.slice(last.offset,last.offset+last.length);
+        Object.assign(last,{name:false,minor:false,cat:"句読点",reps:[w+"."],message:"The sentence should end with a period.",hint:"文の終わりにはピリオド（.）を付けます。"+w+" が人名・地名なら、つづりはそのままで大丈夫です。"});
+      }else if(!last&&m)out.push({offset:m.index,length:m[0].length,message:"The sentence should end with a period.",reps:[m[0]+"."],cat:"句読点",minor:false,hint:"文の終わりにはピリオド（.）を付けます。"});
+    }
+  }
   return out;
 }
 function applyFixes(text,items){
@@ -447,17 +521,34 @@ function applyFixes(text,items){
   items.slice().sort((a,b)=>b.offset-a.offset).forEach(i=>{if(!i.minor&&i.reps.length)s=s.slice(0,i.offset)+i.reps[0]+s.slice(i.offset+i.length)});
   return s;
 }
-function scoreOf(text,items){
-  const n=Math.max(words(text),1);
-  const major=items.filter(i=>!i.minor).length, minor=items.length-major;
-  return Math.max(0,Math.min(100,Math.round(100-(major+minor*0.3)/n*400)));
+function scoreOf(text,items,ct){
+  const n=Math.max(words(text),15);  // 短文で1つのミスが大きく響きすぎないように最低15語として計算
+  const major=items.filter(i=>!i.minor).length, minor=items.filter(i=>i.minor&&!i.name).length;
+  let sc=Math.max(0,Math.min(100,Math.round(100-(major+minor*0.3)/n*400)));
+  if(ct){
+    if(offTopic(ct))sc=Math.min(sc,20);                      // お題と関係ない答案
+    else if(ct.type==="tr")sc=Math.max(0,sc-ct.missing.length*15-(ct.notes||[]).length*10);  // 訳し漏れ1つにつき-15
+  }
+  return sc;
 }
 
 /* ---------- 添削結果 ---------- */
 function wordSpans(s){return esc(s).replace(/[A-Za-z][A-Za-z'’-]*/g,w=>`<span class="w" data-w="${w}">${w}</span>`)}
-function renderResult(text,items,isExample){
-  const score=scoreOf(text,items), major=items.filter(i=>!i.minor).length, minor=items.length-major;
-  const verdict=items.length===0?"誤りは見つかりませんでした":major===0?"ほぼ正しい":major<=2?"一部に誤りあり":"誤りが多い";
+function renderResult(text,items,isExample,ct){
+  if(ct===undefined)ct=contentCheck(text,$("topic").value);
+  const score=scoreOf(text,items,ct), major=items.filter(i=>!i.minor).length, minor=items.length-major;
+  const off=offTopic(ct);
+  const gramVerdict=items.length===0?"文法の誤りは見つかりませんでした":major===0?"ほぼ正しい":major<=2?"一部に誤りあり":"誤りが多い";
+  const verdict=off?"お題に合っていません":ct&&ct.type==="tr"&&!ct.ok?"訳し漏れがあります":gramVerdict;
+  const ctHtml=!ct?"":`
+    <div class="item ${ct.ok?"minor":""}" style="border-left-color:var(${ct.ok?"--ok":"--pen"})">
+      <div class="hd"><span class="chip ${ct.ok?"g":"r"}"><i data-lucide="${ct.ok?"circle-check":"circle-alert"}"></i>${ct.type==="tr"?"和訳の内容":"お題との関係"}</span></div>
+      ${ct.ok?`<p>${ct.type==="tr"?"日本語の意味に必要な要素がそろっています。":"お題に沿った内容です。"}</p>`:""}
+      ${off?`<p><b>答案がお題の内容と合っていない可能性が高いです。</b>お題をもう一度読んで書き直してみましょう。</p>`:""}
+      ${ct.missing.length?`<p>${ct.type==="tr"?"次の要素が英文に入っていません：":"お題に関係する語が見つかりません："}</p><ul style="margin:0;padding-left:1.2em;font-size:.9rem">${ct.missing.map(m=>`<li>${esc(m)}</li>`).join("")}</ul>`:""}
+      ${(ct.notes||[]).map(n=>`<p>${esc(n)}</p>`).join("")}
+      ${ct.models?`<div class="label" style="margin-top:4px"><i data-lucide="book-check"></i>解答例</div>${ct.models.map(m=>`<p class="clean" style="padding:8px 12px">${esc(m)}</p>`).join("")}`:""}
+    </div>`;
   let html="",pos=0;
   items.forEach((i,n)=>{
     html+=wordSpans(text.slice(pos,i.offset));
@@ -479,6 +570,7 @@ function renderResult(text,items,isExample){
           <span class="chip g"><i data-lucide="type"></i>${wc} words</span>
         </div></div>
     </div>
+    ${ctHtml}
     ${lenNote?`<p class="note"><i data-lucide="ruler"></i><span>${lenNote}</span></p>`:""}
     <div class="label"><i data-lucide="pen-tool"></i>赤ペン（単語をタップすると辞書）</div>
     <div class="marked">${html}</div>
@@ -493,8 +585,8 @@ function renderResult(text,items,isExample){
     <div class="row"><button type="button" class="small" id="applyAll"><i data-lucide="wand-sparkles"></i>誤りの修正をすべて答案に反映</button>
       <button type="button" class="small" id="sayFixed"><i data-lucide="volume-2"></i>直した文を読み上げ</button></div>`:""}
     <div id="aiSlot"></div>
-    <p class="note"><i data-lucide="info"></i><span>機械チェックなので、内容や論理（お題に答えているか、和訳の意味が合っているか）は判定できません。見落としや誤検出もあります。</span></p>`;
-  $("p-result")._state={text,items};
+    <p class="note"><i data-lucide="info"></i><span>機械チェックです。お題との関係は決まった単語があるかどうかで判定しているので、言い換えた正しい答えでも「入っていません」と出ることがあります。論理の細かい判定はできません。</span></p>`;
+  $("p-result")._state={text,items,ct};
   icons();
   setupAI(text);
 }
@@ -504,6 +596,7 @@ $("p-result").addEventListener("click",e=>{
   const f=e.target.closest("[data-fix]");
   const stale=()=>{if($("essay").value!==st.text){toast("答案が変わっているので、もう一度チェックしてください。",true);return true}};
   if(f){if(stale())return;const i=st.items[+f.dataset.fix];
+    if(i.name)return;
     $("essay").value=st.text.slice(0,i.offset)+f.dataset.rep+st.text.slice(i.offset+i.length);updWC();check();return}
   if(e.target.closest("#applyAll")){if(stale())return;$("essay").value=applyFixes(st.text,st.items);updWC();check();return}
   if(e.target.closest("#sayFixed"))say(applyFixes(st.text,st.items));
@@ -519,12 +612,13 @@ async function check(){
   busy=true;const btn=$("check");btn.disabled=true;
   btn.innerHTML='<i data-lucide="loader-circle" class="spin"></i><span>チェック中…</span>';icons();
   try{
-    const items=toItems(await languageTool(text));
-    renderResult(text,items,false);
-    const h=store.get("history",[]);h.unshift({at:Date.now(),text,items,topic:$("topic").value});store.set("history",h.slice(0,200));
+    const items=toItems(await languageTool(text),text);
+    const ct=contentCheck(text,$("topic").value);
+    renderResult(text,items,false,ct);
+    const h=store.get("history",[]);h.unshift({at:Date.now(),text,items,topic:$("topic").value,ct});store.set("history",h.slice(0,200));
     updStreak();
-    const sc=scoreOf(text,items);
-    toast(items.length?`チェックしました：${sc}点`:"誤りは見つかりませんでした！");
+    const sc=scoreOf(text,items,ct);
+    toast(offTopic(ct)?`お題に合っていない可能性があります：${sc}点`:items.length||(ct&&!ct.ok)?`チェックしました：${sc}点`:"誤りは見つかりませんでした！");
     sfx(sc>=90?"great":"done");track("check",{score:sc,errors:items.length});
     if(sc>=90&&window.confetti&&!reduceMotion)confetti({particleCount:90,spread:70,origin:{y:.75},colors:["#d33a3a","#2f5fb3","#1f8a5b","#f0b45c"]});
     if(isMobile())go("result");else if(document.body.dataset.tab!=="result")go("result");
@@ -593,7 +687,7 @@ function renderStats(){
   const h=store.get("history",[]);const out=$("statsOut");
   charts.forEach(c=>c.destroy());charts=[];
   if(!h.length){out.innerHTML='<div class="empty"><i data-lucide="chart-line"></i>まだ記録がありません。英文をチェックすると、点数の推移と苦手なミスの種類がここに表示されます。</div>';icons();return}
-  const scores=h.map(x=>scoreOf(x.text,x.items));
+  const scores=h.map(x=>scoreOf(x.text,x.items,x.ct));
   const avg=Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
   const cats={};h.forEach(x=>x.items.forEach(i=>{if(!i.minor)cats[i.cat]=(cats[i.cat]||0)+1}));
   const top=Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,6);
@@ -616,7 +710,7 @@ function renderStats(){
   const recent=h.slice(0,20).reverse();
   charts.push(new Chart($("cScore"),{type:"line",
     data:{labels:recent.map(x=>{const d=new Date(x.at);return `${d.getMonth()+1}/${d.getDate()}`}),
-      datasets:[{data:recent.map(x=>scoreOf(x.text,x.items)),borderColor:pen,backgroundColor:pen+"22",fill:true,tension:.3,pointRadius:3,pointBackgroundColor:pen}]},
+      datasets:[{data:recent.map(x=>scoreOf(x.text,x.items,x.ct)),borderColor:pen,backgroundColor:pen+"22",fill:true,tension:.3,pointRadius:3,pointBackgroundColor:pen}]},
     options:{maintainAspectRatio:false,animation:reduceMotion?false:undefined,plugins:{legend:{display:false}},
       scales:{y:{min:0,max:100,ticks:{stepSize:20},grid:{color:grid}},x:{grid:{display:false}}}}}));
   if(top.length)charts.push(new Chart($("cCat"),{type:"bar",
@@ -626,7 +720,7 @@ function renderStats(){
 }
 $("statsOut").addEventListener("click",e=>{const b=e.target.closest("[data-h]");if(!b)return;
   const x=store.get("history",[])[+b.dataset.h];if(!x)return;
-  if(x.topic)$("topic").value=x.topic;renderTopic();$("essay").value=x.text;updWC();renderResult(x.text,x.items,false);go("result")});
+  if(x.topic)$("topic").value=x.topic;renderTopic();$("essay").value=x.text;updWC();renderResult(x.text,x.items,false,x.ct??null);go("result")});
 
 /* ---------- 分析ツール（APP_CONFIG に ID を書いたときだけ読み込む） ---------- */
 const CFG=window.APP_CONFIG||{};
@@ -771,7 +865,7 @@ if(draft&&draft.text){$("essay").value=draft.text;$("topic").value=draft.topic||
 else{$("topic").value="smartphone";$("essay").value=EXAMPLE_TEXT}
 renderTopic();updWC();updStreak();
 const hist=store.get("history",[]);
-if(hist.length)renderResult(hist[0].text,hist[0].items,false);
+if(hist.length){if(hist[0].topic)$("topic").value=hist[0].topic;renderTopic();renderResult(hist[0].text,hist[0].items,false,hist[0].ct??null)}
 else renderResult(EXAMPLE_TEXT,toItems({matches:[
   {offset:EXAMPLE_TEXT.indexOf("dont"),length:4,message:"Did you mean \"don't\"?",replacements:[{value:"don't"}],rule:{id:"DONT",issueType:"misspelling",category:{id:"TYPOS"}}},
   {offset:EXAMPLE_TEXT.indexOf("safty"),length:5,message:"Possible spelling mistake found.",replacements:[{value:"safety"}],rule:{id:"MORFOLOGIK_RULE_EN_US",issueType:"misspelling",category:{id:"TYPOS"}}},
